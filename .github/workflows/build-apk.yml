@@ -1,0 +1,57 @@
+name: Build Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate project
+        id: loc
+        run: |
+          if [ -f pubspec.yaml ]; then
+            DIR=.
+          else
+            ZIP=$(ls *.zip | head -n1)
+            unzip -q "$ZIP" -d _src
+            DIR=$(dirname "$(find _src -maxdepth 3 -name pubspec.yaml | head -n1)")
+          fi
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.3'
+          channel: stable
+          cache: true
+
+      - name: Build release APK
+        working-directory: ${{ steps.loc.outputs.dir }}
+        run: |
+          chmod +x android/gradlew || true
+          flutter pub get
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/SoloAscent.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SoloAscent-apk
+          path: SoloAscent.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Solo Ascent build ${{ github.run_number }}
+          files: SoloAscent.apk
